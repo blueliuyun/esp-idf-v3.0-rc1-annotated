@@ -12,10 +12,18 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 
+/** @2018-02-07 TY Add ESP_LOGD */
+#include "soc/dport_access.h"
+#include "soc/dport_reg.h"
+
+
 /* Can run 'make menuconfig' to choose the GPIO to blink,
    or you can edit the following line and set a number here.
 */
 #define BLINK_GPIO CONFIG_BLINK_GPIO
+
+/** @2018-02-07 TY Add ESP_LOGD */
+static const char *TAG = "blink";
 
 void blink_task(void *pvParameter)
 {
@@ -39,6 +47,8 @@ void blink_task(void *pvParameter)
 }
 
 void app_main()
-{
+{    
+    printf("blink : enter app_main.\n");
+    printf("DPORT_APPCPU_CTRL_D_REG : 0x%x\n", DPORT_REG_READ(DPORT_APPCPU_CTRL_D_REG));
     xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
 }
