@@ -51,7 +51,9 @@
 typedef struct twdt_task_t twdt_task_t;
 struct twdt_task_t {
     TaskHandle_t task_handle;
-    bool has_reset;
+    bool has_reset; /** @2018-02-08 true : means this task has been in controled, and has feed TWDT
+                     *   false : means this task did not feed TWDT   
+                     */
     twdt_task_t *next;
 };
 
@@ -124,12 +126,12 @@ static void task_wdt_isr(void *arg)
     portENTER_CRITICAL(&twdt_spinlock);
     twdt_task_t *twdttask;
     const char *cpu;
-    //Reset hardware timer so that 2nd stage timeout is not reached (will trigger system reset)
+    //Reset hardware timer so that 2nd stage timeout is not reached (will trigger system reset) !!!
     TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;
     TIMERG0.wdt_feed=1;
     TIMERG0.wdt_wprotect=0;
     //Acknowledge interrupt
-    TIMERG0.int_clr_timers.wdt=1;
+    TIMERG0.int_clr_timers.wdt=1; //@2018-02-08 TY If it is necerry to put Clear Int before wdt_feed OPE.???
     //We are taking a spinlock while doing I/O (ets_printf) here. Normally, that is a pretty
     //bad thing, possibly (temporarily) hanging up the 2nd core and stopping FreeRTOS. In this case,
     //something bad already happened and reporting this is considered more important
@@ -138,7 +140,7 @@ static void task_wdt_isr(void *arg)
     //Return immediately if no tasks have been added to task list
     ASSERT_EXIT_CRIT_RETURN((twdt_config->list != NULL), VOID_RETURN);
 
-    //Watchdog got triggered because at least one task did not reset in time.
+    //Watchdog got triggered because at least one task did not reset in time. !!!@2018-02-08 It is net recommend the 'ets_printf' between a spinlock
     ets_printf("Task watchdog got triggered. The following tasks did not reset the watchdog in time:\n");
     for (twdttask=twdt_config->list; twdttask!=NULL; twdttask=twdttask->next) {
         if (!twdttask->has_reset) {
@@ -185,13 +187,13 @@ esp_err_t esp_task_wdt_init(uint32_t timeout, bool panic)
         //Configure hardware timer
         periph_module_enable(PERIPH_TIMG0_MODULE);
         TIMERG0.wdt_wprotect=TIMG_WDT_WKEY_VALUE;               //Disable write protection
-        TIMERG0.wdt_config0.sys_reset_length=7;                 //3.2uS
-        TIMERG0.wdt_config0.cpu_reset_length=7;                 //3.2uS
+        TIMERG0.wdt_config0.sys_reset_length=7;                 //3.2uS,    @2018-02-08 系统复位信号长度选择
+        TIMERG0.wdt_config0.cpu_reset_length=7;                 //3.2uS,    @2018-02-08 CPU 复位信号长度选择
         TIMERG0.wdt_config0.level_int_en=1;
         TIMERG0.wdt_config0.stg0=TIMG_WDT_STG_SEL_INT;          //1st stage timeout: interrupt
         TIMERG0.wdt_config0.stg1=TIMG_WDT_STG_SEL_RESET_SYSTEM; //2nd stage timeout: reset system
         TIMERG0.wdt_config1.clk_prescale=80*500;                //Prescaler: wdt counts in ticks of 0.5mS
-        TIMERG0.wdt_config2=twdt_config->timeout*2000;      //Set timeout before interrupt
+        TIMERG0.wdt_config2=twdt_config->timeout*2000;      //Set timeout before interrupt, @2018-02-08 继上一行 ticks of 0.5mS, 这里是 wdt 的feed周期 - s0
         TIMERG0.wdt_config3=twdt_config->timeout*4000;      //Set timeout before reset
         TIMERG0.wdt_config0.en=1;
         TIMERG0.wdt_feed=1;
@@ -244,7 +246,8 @@ esp_err_t esp_task_wdt_add(TaskHandle_t handle)
     twdt_task_t *target_task;
     bool all_reset;
     if (handle == NULL){    //Get handle of current task if none is provided
-        handle = xTaskGetCurrentTaskHandle();
+        handle = xTaskGetCurrentTaskHandle();   //@2018-02-08 If handle == NULL, then use CurrentTaskHandle, 
+                                                // eg. handle(== IdleTaskHandle), Maybe if there is no IdleTaskHandle, Then use the CurrentTaskHandle and Add to TWDT task list
     }
     //Check if tasks exists in task list, and if all other tasks have reset
     target_task = find_task_in_twdt_list(handle, &all_reset);
