@@ -18,6 +18,9 @@
 #include "argtable3/argtable3.h"
 #include "cmd_decl.h"
 #include "esp_vfs_fat.h"
+/* BugFix #1478 */
+#include "nvs.h"
+#include "nvs_flash.h"
 
 static const char* TAG = "example";
 
@@ -45,13 +48,25 @@ static void initialize_filesystem()
 }
 #endif // CONFIG_STORE_HISTORY
 
+/* BugFix  #1478 */
+static void initialize_nvs()
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES) {
+        ESP_ERROR_CHECK( nvs_flash_erase() );
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+}
+
 static void initialize_console()
 {
     /* Disable buffering on stdin and stdout */
     setvbuf(stdin, NULL, _IONBF, 0);
     setvbuf(stdout, NULL, _IONBF, 0);
+    /** @2018-02-10 _IONBF : no buffering used, so each IO operation is written as soon as possible. */
 
-    /* Minicom, screen, idf_monitor send CR when ENTER key is pressed */
+    /* Minicom, screen, idf_monitor send CR when ENTER key is pressed @2018-02-10 Process ENTER key down */
     esp_vfs_dev_uart_set_rx_line_endings(ESP_LINE_ENDINGS_CR);
     /* Move the caret to the beginning of the next line on '\n' */
     esp_vfs_dev_uart_set_tx_line_endings(ESP_LINE_ENDINGS_CRLF);
@@ -67,6 +82,7 @@ static void initialize_console()
     esp_console_config_t console_config = {
             .max_cmdline_args = 8,
             .max_cmdline_length = 256,
+            //.hint_bold = 0, //@2018-02-10 TEST shell bold font
 #if CONFIG_LOG_COLORS
             .hint_color = atoi(LOG_COLOR_CYAN)
 #endif
@@ -94,6 +110,8 @@ static void initialize_console()
 
 void app_main()
 {
+     initialize_nvs();
+     
 #if CONFIG_STORE_HISTORY
     initialize_filesystem();
 #endif

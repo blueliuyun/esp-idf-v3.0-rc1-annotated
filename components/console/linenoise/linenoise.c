@@ -891,7 +891,7 @@ int linenoiseProbe() {
     if (res != 0) {
         return -1;
     }
-    /* Device status request */
+    /* Device status request @2018-02-10 从设备请求一个设备状态响应. */
     fprintf(stdout, "\x1b[5n");
 
     /* Try to read response */
